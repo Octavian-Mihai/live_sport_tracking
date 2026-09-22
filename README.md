@@ -2,6 +2,16 @@
 
 Follow your favorite teams: live scores, schedules, standings, and player stats in one dashboard.
 
+## Demo
+
+| Dashboard | Team page |
+| --- | --- |
+| ![Dashboard with saved teams, upcoming games, and recent results](public/screenshots/dashboard.png) | ![Team page with schedule, standings, and roster](public/screenshots/team-detail.png) |
+
+| Home | Browse teams |
+| --- | --- |
+| ![Landing page](public/screenshots/home.png) | ![Browse teams by league](public/screenshots/teams-search.png) |
+
 ## Stack
 
 - **Next.js 16** (App Router, Turbopack, React 19)
