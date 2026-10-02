@@ -1,5 +1,7 @@
 # Live Sports Tracker
 
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for an architecture diagram.
+
 Follow your favorite teams: live scores, schedules, standings, and player stats in one dashboard.
 
 ## Demo
