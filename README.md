@@ -72,6 +72,58 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - **Real-time updates**: `src/hooks/useLiveGames.ts` polls `/api/games/live` via SWR every 25s. `src/components/LiveScoreBanner.tsx` diffs consecutive polls to raise in-app toast notifications on kickoff / goals / full-time for the signed-in user's saved teams. `src/app/api/notify/route.ts` + `vercel.json` wire up an optional hourly cron for game-day emails via Resend (no-op if `RESEND_API_KEY` isn't set).
 - **Auth**: `src/auth.ts` (NextAuth v5), `src/proxy.ts` (Next 16's renamed `middleware.ts`) protects `/dashboard/**`.
 
+### Request flow
+
+```mermaid
+flowchart LR
+    Browser([Browser]) --> Pages["App Router pages<br/>teams · dashboard · auth"]
+    Browser -->|"SWR poll every 25 s"| Live["api/games/live"]
+    Pages --> SA["lib/sports-api.ts<br/>normalize · fetch cache"]
+    Live --> SA
+    SA -->|"revalidate: hours / minutes / ~20 s"| TSDB[(TheSportsDB)]
+    Pages --> Auth["auth.ts · proxy.ts<br/>NextAuth v5 · /dashboard guard"]
+    Browser --> API["api/user/teams · api/teams · api/signup"]
+    API --> Prisma["lib/prisma.ts"]
+    Auth --> Prisma
+    Prisma --> PG[("PostgreSQL<br/>User · Team · UserTeam · …")]
+    Cron["Vercel cron (hourly)"] --> Notify["api/notify"] --> Mail["lib/email.ts · Resend"]
+    Notify --> Prisma
+    Banner["LiveScoreBanner<br/>diffs polls → toasts"] --> Live
+```
+
+## Path and purpose
+
+| Path | Purpose |
+|---|---|
+| `src/app/page.tsx`, `layout.tsx` | Landing page and root layout |
+| `src/app/teams/`, `teams/[id]/` | Team browse/search and detail (schedule, standings, roster), server-rendered |
+| `src/app/(dashboard)/dashboard/` | Signed-in dashboard of saved teams, upcoming games and results |
+| `src/app/(auth)/login`, `signup` | Credentials sign-in and sign-up pages |
+| `src/app/api/games/live` | Live-score endpoint polled by the client |
+| `src/app/api/teams`, `api/user/teams` | Team lookup and the user's saved teams (save/unsave) |
+| `src/app/api/notify` | Cron-triggered game-day email job (no-op without `RESEND_API_KEY`) |
+| `src/auth.ts`, `src/proxy.ts` | NextAuth v5 config and the middleware that protects `/dashboard/**` |
+| `src/lib/sports-api.ts` | The only module that talks to the sports provider; normalizes data and sets cache windows |
+| `src/lib/prisma.ts`, `email.ts`, `utils.ts` | Prisma client, email sending, helpers |
+| `src/hooks/useLiveGames.ts` | SWR hook polling live games |
+| `src/components/` | `GameCard`, `TeamCard`, `StandingsTable`, `LiveScoreBanner`, `SaveTeamButton`, `Navbar`, `SearchBar`, `Providers` |
+| `prisma/` | Schema and migrations |
+| `vercel.json` | Hourly cron for notifications |
+
+## Design patterns
+
+- **Adapter around the data provider.** Everything upstream is normalized in `sports-api.ts`, so swapping TheSportsDB for
+  another API touches one file.
+- **Cache-by-volatility.** Each upstream call has a `revalidate` window matched to how fast the data changes, so concurrent
+  users share one upstream request.
+- **Persist only what the user owns.** Teams and leagues are upserted when saved; schedules, rosters and scores are fetched
+  live, so there is no sync job to keep correct.
+- **Server components for reads, route handlers for interaction.** Pages fetch directly; client-side actions go through `api/**`.
+- **Polling with diffing.** `useLiveGames` polls and `LiveScoreBanner` compares consecutive results to emit kickoff, goal and
+  full-time toasts.
+- **Edge guard.** One middleware file protects the whole `/dashboard` tree instead of per-page checks.
+- **Optional integrations degrade quietly.** Without `RESEND_API_KEY`, the notify route does nothing.
+
 ## Getting started
 
 1. **Install dependencies**
